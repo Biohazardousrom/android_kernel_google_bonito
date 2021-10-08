@@ -1350,7 +1350,7 @@ static int wlfw_msa_mem_info_send_sync_msg(void)
 	for (i = 0; i < resp.mem_region_info_len; i++) {
 
 		if (resp.mem_region_info[i].size > penv->msa_mem_size ||
-		    resp.mem_region_info[i].region_addr > max_mapped_addr ||
+		    resp.mem_region_info[i].region_addr >= max_mapped_addr ||
 		    resp.mem_region_info[i].region_addr < penv->msa_pa ||
 		    resp.mem_region_info[i].size +
 		    resp.mem_region_info[i].region_addr > max_mapped_addr) {
@@ -2650,7 +2650,8 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 
 	icnss_pr_vdbg("Modem-Notify: event %lu\n", code);
 
-	if (code == SUBSYS_RAMDUMP_NOTIFICATION) {
+	if (code == SUBSYS_RAMDUMP_NOTIFICATION &&
+		notif->crashed == CRASH_STATUS_ERR_FATAL) {
 		ret = icnss_assign_msa_perm_all(priv,
 						ICNSS_MSA_PERM_HLOS_ALL);
 		if (!ret) {

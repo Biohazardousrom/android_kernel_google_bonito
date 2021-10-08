@@ -48,6 +48,7 @@
 #define DS2_ADM_COPP_TOPOLOGY_ID 0xFFFFFFFF
 #endif
 
+extern int msm_pcm_routing_is_flick_port(int port_id);
 /* ENUM for adm_status */
 enum adm_cal_status {
 	ADM_STATUS_CALIBRATION_REQUIRED = 0,
@@ -1557,7 +1558,8 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			idx = ADM_GET_PARAMETER_LENGTH * copp_idx;
 			if ((payload[0] == 0) && (data->payload_size >
 				(4 * sizeof(*payload))) &&
-				(data->payload_size - 4 >=
+				(data->payload_size -
+				(4 * sizeof(*payload)) >=
 				payload[3]) &&
 				(ARRAY_SIZE(adm_get_parameters) >
 				idx) &&
@@ -1596,9 +1598,12 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 				pr_err("%s: ADM_CMDRSP_GET_PP_TOPO_MODULE_LIST",
 					 __func__);
 				pr_err(":err = 0x%x\n", payload[0]);
-			} else if (payload[1] >
-				   ((ADM_GET_TOPO_MODULE_LIST_LENGTH /
-				   sizeof(uint32_t)) - 1)) {
+			} else if ((payload[1] >
+				((ADM_GET_TOPO_MODULE_LIST_LENGTH /
+				sizeof(uint32_t)) - 1)) ||
+				((data->payload_size -
+				(2 *  sizeof(uint32_t))) <
+				(payload[1] * sizeof(uint32_t)))) {
 				pr_err("%s: ADM_CMDRSP_GET_PP_TOPO_MODULE_LIST",
 					 __func__);
 				pr_err(":size = %d\n", payload[1]);
@@ -2177,6 +2182,9 @@ static void send_adm_cal(int port_id, int copp_idx, int path, int perf_mode,
 			 int passthr_mode)
 {
 	pr_debug("%s: port id 0x%x copp_idx %d\n", __func__, port_id, copp_idx);
+
+	if (msm_pcm_routing_is_flick_port(port_id))
+		return;
 
 	if (passthr_mode != LISTEN)
 		send_adm_cal_type(ADM_AUDPROC_CAL, path, port_id, copp_idx,

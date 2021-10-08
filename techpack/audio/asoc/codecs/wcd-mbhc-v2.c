@@ -591,11 +591,6 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 		}
 
 		if (mbhc->micbias_enable) {
-			if (rt5514_notifier.cb_func)
-				rt5514_notifier.cb_func(rt5514_notifier.codec,
-						RT5514_SWITCH_MIC1);
-			if (mbhc->mbhc_cb->switch_mic_mb)
-				mbhc->mbhc_cb->switch_mic_mb(codec, RT5514_SWITCH_MIC1);
 			if (mbhc->mbhc_cb->mbhc_micbias_control)
 				mbhc->mbhc_cb->mbhc_micbias_control(
 						codec, MIC_BIAS_2,
@@ -611,6 +606,11 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			mbhc->micbias_enable = false;
 		}
 
+		if (rt5514_notifier.cb_func && mbhc->mbhc_cb->switch_mic_mb) {
+			rt5514_notifier.cb_func(rt5514_notifier.codec,
+					RT5514_SWITCH_MIC1);
+			mbhc->mbhc_cb->switch_mic_mb(codec, RT5514_SWITCH_MIC1);
+		}
 		mbhc->hph_type = WCD_MBHC_HPH_NONE;
 		mbhc->zl = mbhc->zr = 0;
 		pr_info("%s: Reporting removal %d(%x)\n", __func__,
@@ -735,20 +735,11 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 		mbhc->hph_status |= jack_type;
 
-		if (mbhc->micbias_enable) {
-			if (rt5514_notifier.cb_func)
-				rt5514_notifier.cb_func(rt5514_notifier.codec,
-						RT5514_SWITCH_MIC2);
-			if (mbhc->mbhc_cb->switch_mic_mb)
-				mbhc->mbhc_cb->switch_mic_mb(codec, RT5514_SWITCH_MIC2);
-		} else {
-			if (rt5514_notifier.cb_func)
-				rt5514_notifier.cb_func(rt5514_notifier.codec,
-						RT5514_SWITCH_MIC1);
-			if (mbhc->mbhc_cb->switch_mic_mb)
-				mbhc->mbhc_cb->switch_mic_mb(codec, RT5514_SWITCH_MIC1);
+		if (rt5514_notifier.cb_func && mbhc->mbhc_cb->switch_mic_mb) {
+			rt5514_notifier.cb_func(rt5514_notifier.codec,
+					RT5514_SWITCH_MIC2);
+			mbhc->mbhc_cb->switch_mic_mb(codec, RT5514_SWITCH_MIC2);
 		}
-
 		pr_info("%s: Reporting insertion %d(%x)\n", __func__,
 			 jack_type, mbhc->hph_status);
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
@@ -1152,7 +1143,7 @@ static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 	}
 	mbhc->buttons_pressed |= mask;
 	mbhc->mbhc_cb->lock_sleep(mbhc, true);
-	if (schedule_delayed_work(&mbhc->mbhc_btn_dwork,
+	if (queue_delayed_work(system_power_efficient_wq, &mbhc->mbhc_btn_dwork,
 				msecs_to_jiffies(400)) == 0) {
 		WARN(1, "Button pressed twice without release event\n");
 		mbhc->mbhc_cb->lock_sleep(mbhc, false);
@@ -1790,7 +1781,7 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 		rc = wcd_mbhc_initialise(mbhc);
 	} else {
 		if (!mbhc->mbhc_fw || !mbhc->mbhc_cal)
-			schedule_delayed_work(&mbhc->mbhc_firmware_dwork,
+			queue_delayed_work(system_power_efficient_wq, &mbhc->mbhc_firmware_dwork,
 				      usecs_to_jiffies(FW_READ_TIMEOUT));
 		else
 			pr_err("%s: Skipping to read mbhc fw, 0x%pK %pK\n",

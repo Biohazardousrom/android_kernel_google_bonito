@@ -220,18 +220,6 @@ typedef enum {
 
 #endif
 
-/* RSN capabilities structure */
-
-struct rsn_caps {
-	uint16_t PreAuthSupported:1;
-	uint16_t NoPairwise:1;
-	uint16_t PTKSAReplayCounter:2;
-	uint16_t GTKSAReplayCounter:2;
-	uint16_t MFPRequired:1;
-	uint16_t MFPCapable:1;
-	uint16_t Reserved:8;
-};
-
 /**
  * enum sir_roam_op_code - Operation to be done by the callback.
  * @SIR_ROAM_SYNCH_PROPAGATION: Propagate the new BSS info after roaming.
@@ -913,11 +901,6 @@ typedef struct sSirChannelList {
 	uint8_t channelNumber[SIR_ESE_MAX_MEAS_IE_REQS];
 } tSirChannelList, *tpSirChannelList;
 
-struct sir_channel_list {
-	uint8_t numChannels;
-	uint8_t channelNumber[];
-};
-
 typedef struct sSirDFSChannelList {
 	uint32_t timeStamp[SIR_MAX_24G_5G_CHANNEL_RANGE];
 
@@ -1050,7 +1033,7 @@ typedef struct sSirSmeScanReq {
 	uint32_t oui_field_offset;
 
 	/* channelList MUST be the last field of this structure */
-	struct sir_channel_list channelList;
+	tSirChannelList channelList;
 
 	/*-----------------------------
 	   tSirSmeScanReq....
@@ -3714,7 +3697,6 @@ typedef struct sSirRoamOffloadScanReq {
 	struct roam_fils_params roam_fils_params;
 #endif
 	struct scoring_param score_params;
-	struct rsn_caps rsn_caps;
 	struct wmi_11k_offload_params offload_11k_params;
 } tSirRoamOffloadScanReq, *tpSirRoamOffloadScanReq;
 
@@ -4332,7 +4314,7 @@ typedef struct sSirScanOffloadReq {
 	uint32_t oui_field_len;
 	uint32_t oui_field_offset;
 
-	struct sir_channel_list channelList;
+	tSirChannelList channelList;
 	/*-----------------------------
 	  sSirScanOffloadReq....
 	  -----------------------------

@@ -133,6 +133,7 @@ config PM_SLEEP
 	def_bool y
 	depends on SUSPEND || HIBERNATE_CALLBACKS
 	select PM
+	select SRCU
 
 config PM_SLEEP_SMP
 	def_bool y
@@ -343,8 +344,3 @@ config CPU_PM
 config DEDUCE_WAKEUP_REASONS
 	bool
 	default n
-
-config	BOEFFLA_WL_BLOCKER
-		bool "Boeffla generic wakelock blocker driver"
-		depends on PM
-		default y

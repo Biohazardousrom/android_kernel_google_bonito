@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018, 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2098,7 +2098,7 @@ void wlan_hdd_cfg80211_acs_ch_select_evt(hdd_adapter_t *adapter)
 		INIT_DELAYED_WORK(&con_sap_adapter->acs_pending_work,
 				      wlan_hdd_cfg80211_start_pending_acs);
 		/* Lets give 500ms for OBSS + START_BSS to complete */
-		schedule_delayed_work(&con_sap_adapter->acs_pending_work,
+		queue_delayed_work(system_power_efficient_wq, &con_sap_adapter->acs_pending_work,
 							msecs_to_jiffies(500));
 	}
 }
@@ -13981,12 +13981,6 @@ static void wlan_hdd_update_band_cap(hdd_context_t *hdd_ctx)
 	uint16_t val16;
 	tSirMacHTCapabilityInfo *ht_cap_info;
 	QDF_STATUS status;
-	struct ieee80211_supported_band *band_2g;
-	struct ieee80211_supported_band *band_5g;
-	uint8_t i;
-
-	band_2g = hdd_ctx->wiphy->bands[HDD_NL80211_BAND_2GHZ];
-	band_5g = hdd_ctx->wiphy->bands[HDD_NL80211_BAND_5GHZ];
 
 	status = sme_cfg_get_int(hdd_ctx->hHal, WNI_CFG_HT_CAP_INFO, &val32);
 	if (QDF_STATUS_SUCCESS != status) {
@@ -14012,26 +14006,6 @@ static void wlan_hdd_update_band_cap(hdd_context_t *hdd_ctx)
 		hdd_ctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->
 						vht_cap.vht_supported = 0;
 		hdd_ctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->vht_cap.cap = 0;
-	}
-	if (band_2g) {
-		for (i = 0; i < hdd_ctx->num_rf_chains; i++)
-			band_2g->ht_cap.mcs.rx_mask[i] = 0xff;
-		/*
-		 * According to mcs_nss HT MCS parameters highest data
-		 * rate for Nss = 1 is 150 Mbps
-		 */
-		band_2g->ht_cap.mcs.rx_highest =
-				cpu_to_le16(150 * hdd_ctx->num_rf_chains);
-	}
-	if (band_5g) {
-		for (i = 0; i < hdd_ctx->num_rf_chains; i++)
-			band_5g->ht_cap.mcs.rx_mask[i] = 0xff;
-		/*
-		 * According to mcs_nss HT MCS parameters highest data
-		 * rate for Nss = 1 is 150 Mbps
-		 */
-		band_5g->ht_cap.mcs.rx_highest =
-				cpu_to_le16(150 * hdd_ctx->num_rf_chains);
 	}
 }
 
@@ -18275,8 +18249,6 @@ int wlan_hdd_try_disconnect(hdd_adapter_t *pAdapter)
 			if (!rc) {
 				hdd_err("roaming comp var timed out session Id: %d",
 					pAdapter->sessionId);
-				/* Clear roaming in progress flag */
-				hdd_set_roaming_in_progress(false);
 			}
 			if (pAdapter->roam_ho_fail) {
 				INIT_COMPLETION(pAdapter->disconnect_comp_var);
@@ -18388,14 +18360,9 @@ static bool wlan_hdd_reassoc_bssid_hint(hdd_adapter_t *adapter,
 		qdf_mem_copy(wext_state->req_bssId.bytes, bssid,
 			     QDF_MAC_ADDR_SIZE);
 
-		hdd_set_roaming_in_progress(true);
 		*status = hdd_reassoc(adapter, bssid, channel,
 				      CONNECT_CMD_USERSPACE);
 		hdd_debug("hdd_reassoc: status: %d", *status);
-		if (status)
-			hdd_set_roaming_in_progress(false);
-
-		hdd_debug("hdd_reassoc: status: %p", status);
 	}
 	return reassoc;
 }
@@ -18639,8 +18606,6 @@ int wlan_hdd_disconnect(hdd_adapter_t *pAdapter, u16 reason)
 			if (!rc) {
 				hdd_err("roaming comp var timed out session Id: %d",
 					pAdapter->sessionId);
-				/* Clear roaming in progress flag */
-				hdd_set_roaming_in_progress(false);
 			}
 			if (pAdapter->roam_ho_fail) {
 				INIT_COMPLETION(pAdapter->disconnect_comp_var);

@@ -27,7 +27,7 @@
 #include "adsp_err.h"
 
 #if defined(CONFIG_CIRRUS_SPKR_PROTECTION)
-#include <dsp/msm-cirrus-playback.h>
+#include <asoc/msm-cirrus-playback.h>
 #endif
 
 #define WAKELOCK_TIMEOUT	5000
@@ -127,7 +127,7 @@ struct afe_ctl {
 	int dev_acdb_id[AFE_MAX_PORTS];
 	routing_cb rt_cb;
 };
-
+extern int msm_pcm_routing_is_flick_port(int port_id);
 static atomic_t afe_ports_mad_type[SLIMBUS_PORT_LAST - SLIMBUS_0_RX];
 static unsigned long afe_configured_cmd;
 
@@ -1321,7 +1321,10 @@ static int afe_send_hw_delay(u16 port_id, u32 rate)
 
 	memset(&delay_entry, 0, sizeof(delay_entry));
 	delay_entry.sample_rate = rate;
-	if (afe_get_port_type(port_id) == MSM_AFE_PORT_TYPE_TX)
+	if (msm_pcm_routing_is_flick_port(port_id)) {
+		delay_entry.delay_usec = 0;
+		ret = 0;
+	} else if (afe_get_port_type(port_id) == MSM_AFE_PORT_TYPE_TX)
 		ret = afe_get_cal_hw_delay(TX_DEVICE, &delay_entry);
 	else if (afe_get_port_type(port_id) == MSM_AFE_PORT_TYPE_RX)
 		ret = afe_get_cal_hw_delay(RX_DEVICE, &delay_entry);
@@ -1448,6 +1451,10 @@ static int afe_get_cal_topology_id(u16 port_id, u32 *topology_id,
 		pr_err("%s: topology_id is NULL\n", __func__);
 		return -EINVAL;
 	}
+
+	if (msm_pcm_routing_is_flick_port(port_id))
+		return ret;
+
 	*topology_id = 0;
 
 	mutex_lock(&this_afe.cal_data[cal_type_index]->lock);
@@ -1681,6 +1688,9 @@ void afe_send_cal(u16 port_id)
 	int ret;
 
 	pr_debug("%s: port_id=0x%x\n", __func__, port_id);
+
+	if (msm_pcm_routing_is_flick_port(port_id))
+		return;
 
 	if (afe_get_port_type(port_id) == MSM_AFE_PORT_TYPE_TX) {
 		afe_send_cal_spkr_prot_tx(port_id);
@@ -5723,6 +5733,7 @@ int afe_validate_port(u16 port_id)
 	case SLIMBUS_2_RX:
 	case SLIMBUS_2_TX:
 	case SLIMBUS_3_RX:
+	case SLIMBUS_3_TX:
 	case INT_BT_SCO_RX:
 	case INT_BT_SCO_TX:
 	case INT_BT_A2DP_RX:

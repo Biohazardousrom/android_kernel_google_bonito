@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -83,18 +83,17 @@ struct index_data_rate_type {
 #ifdef WLAN_FEATURE_LINK_LAYER_STATS
 
 /**
- * struct hdd_ll_stats_priv - hdd link layer stats private
- * @ll_stats: head to different link layer stats received in scheduler
- *            thread context
+ * struct hdd_ll_stats_context - hdd link layer stats context
+ *
  * @request_id: userspace-assigned link layer stats request id
  * @request_bitmap: userspace-assigned link layer stats request bitmap
- * @ll_stats_lock: Lock to serially access request_bitmap
+ * @response_event: LL stats request wait event
  */
-struct hdd_ll_stats_priv {
-	qdf_list_t ll_stats_q;
+struct hdd_ll_stats_context {
 	uint32_t request_id;
 	uint32_t request_bitmap;
-	qdf_spinlock_t ll_stats_lock;
+	struct completion response_event;
+	spinlock_t context_lock;
 };
 
 /*
@@ -287,8 +286,8 @@ void wlan_hdd_cfg80211_stats_ext_callback(void *ctx,
 void wlan_hdd_cfg80211_stats_ext2_callback(void *ctx,
 	struct stats_ext2_event *pmsg);
 
-void wlan_hdd_cfg80211_link_layer_stats_callback(void *ctx, int indType,
-						 void *pRsp, void *context);
+void wlan_hdd_cfg80211_link_layer_stats_callback(void *ctx,
+						 int indType, void *pRsp);
 
 /**
  * wlan_hdd_get_rcpi() - Wrapper to get current RCPI

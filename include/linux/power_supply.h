@@ -297,6 +297,7 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_CHARGE_DISABLE,
 	POWER_SUPPLY_PROP_PD_IN_EXPLICIT_CONTRACT,
 	POWER_SUPPLY_PROP_CHARGER_STATUS_FAST,
+	POWER_SUPPLY_PROP_BATT_CE_CTRL,
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_PROP_CHARGE_COUNTER_EXT,
 	/* Properties of type `const char *' */
@@ -438,6 +439,7 @@ struct power_supply {
 	spinlock_t changed_lock;
 	bool changed;
 	bool initialized;
+	bool removing;
 	atomic_t use_cnt;
 #ifdef CONFIG_THERMAL
 	struct thermal_zone_device *tzd;

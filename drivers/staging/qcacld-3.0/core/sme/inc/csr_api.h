@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -47,7 +47,6 @@ typedef enum {
 	/* MAC layer authentication types */
 	eCSR_AUTH_TYPE_OPEN_SYSTEM,
 	eCSR_AUTH_TYPE_SHARED_KEY,
-	eCSR_AUTH_TYPE_SAE,
 	eCSR_AUTH_TYPE_AUTOSWITCH,
 
 	/* Upper layer authentication types */
@@ -71,10 +70,6 @@ typedef enum {
 	eCSR_AUTH_TYPE_FILS_SHA384,
 	eCSR_AUTH_TYPE_FT_FILS_SHA256,
 	eCSR_AUTH_TYPE_FT_FILS_SHA384,
-	eCSR_AUTH_TYPE_OWE,
-	eCSR_AUTH_TYPE_SUITEB_EAP_SHA256,
-	eCSR_AUTH_TYPE_SUITEB_EAP_SHA384,
-	eCSR_AUTH_TYPE_DPP_RSN,
 	eCSR_NUM_OF_SUPPORT_AUTH_TYPE,
 	eCSR_AUTH_TYPE_FAILED = 0xff,
 	eCSR_AUTH_TYPE_UNKNOWN = eCSR_AUTH_TYPE_FAILED,
@@ -99,9 +94,10 @@ typedef enum {
 	eCSR_ENCRYPT_TYPE_BTK,
 #endif
 #endif /* FEATURE_WLAN_ESE */
+#ifdef WLAN_FEATURE_11W
+	/* 11w BIP */
 	eCSR_ENCRYPT_TYPE_AES_CMAC,
-	eCSR_ENCRYPT_TYPE_AES_GMAC_128,
-	eCSR_ENCRYPT_TYPE_AES_GMAC_256,
+#endif
 	eCSR_ENCRYPT_TYPE_AES_GCMP,
 	eCSR_ENCRYPT_TYPE_AES_GCMP_256,
 	eCSR_ENCRYPT_TYPE_ANY,
@@ -231,8 +227,6 @@ typedef enum {
 #define CSR_AES_KEY_LEN             16
 #define CSR_AES_GCMP_KEY_LEN        16
 #define CSR_AES_GCMP_256_KEY_LEN    32
-#define CSR_AES_GMAC_128_KEY_LEN    16
-#define CSR_AES_GMAC_256_KEY_LEN    32
 #define CSR_MAX_TX_POWER        (WNI_CFG_CURRENT_TX_POWER_LEVEL_STAMAX)
 #define CSR_MAX_RSC_LEN             16
 #ifdef FEATURE_WLAN_WAPI
@@ -545,9 +539,6 @@ typedef enum {
 	eCSR_ROAM_START,
 	eCSR_ROAM_ABORT,
 	eCSR_ROAM_NAPI_OFF,
-	eCSR_ROAM_SAE_COMPUTE,
-	/* LFR3 Roam sync complete */
-	eCSR_ROAM_SYNCH_COMPLETE,
 } eRoamCmdStatus;
 
 /* comment inside indicates what roaming callback gets */
@@ -946,7 +937,6 @@ typedef struct tagCsrRoamProfile {
 	uint8_t MFPRequired;
 	uint8_t MFPCapable;
 #endif
-	tAniEdType mgmt_encryption_type;
 	tCsrKeys Keys;
 	tCsrChannelInfo ChannelInfo;
 	uint8_t operationChannel;
@@ -1566,9 +1556,6 @@ typedef struct tagCsrRoamInfo {
 	int rssi;
 	int tx_rate;
 	int rx_rate;
-#ifdef WLAN_FEATURE_SAE
-	struct sir_sae_info *sae_info;
-#endif
 } tCsrRoamInfo;
 
 typedef struct tagCsrFreqScanInfo {
@@ -1816,20 +1803,6 @@ typedef QDF_STATUS (*csr_roamSessionCloseCallback)(void *pContext);
 		(eCSR_AUTH_TYPE_FILS_SHA384 == auth_type) || \
 		(eCSR_AUTH_TYPE_FT_FILS_SHA256 == auth_type) || \
 		(eCSR_AUTH_TYPE_FT_FILS_SHA384 == auth_type))
-
-#ifdef WLAN_FEATURE_OWE
-#define CSR_IS_AUTH_TYPE_OWE(auth_type) \
-	(eCSR_AUTH_TYPE_OWE == auth_type)
-#else
-#define CSR_IS_AUTH_TYPE_OWE(auth_type) (false)
-#endif
-
-#ifdef WLAN_FEATURE_SAE
-#define CSR_IS_AUTH_TYPE_SAE(auth_type) \
-	(eCSR_AUTH_TYPE_SAE == auth_type)
-#else
-#define CSR_IS_AUTH_TYPE_SAE(auth_type) (false)
-#endif
 
 QDF_STATUS csr_set_channels(tHalHandle hHal, tCsrConfigParam *pParam);
 

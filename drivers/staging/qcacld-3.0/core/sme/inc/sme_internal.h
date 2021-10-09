@@ -191,9 +191,8 @@ typedef struct tagSmeStruct {
 	void (*pChAvoidNotificationCb)(void *hdd_context, void *indi_param);
 #endif /* FEATURE_WLAN_CH_AVOID */
 #ifdef WLAN_FEATURE_LINK_LAYER_STATS
-	void *ll_stats_context;
 	void (*pLinkLayerStatsIndCallback)(void *callbackContext,
-			int indType, void *pRsp, void *context);
+			int indType, void *pRsp);
 	void (*link_layer_stats_ext_cb)(tHddHandle callback_ctx,
 					tSirLLStatsResults *rsp);
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */

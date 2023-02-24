@@ -16,10 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/pm_wakeirq.h>
 #include <linux/types.h>
-#include <linux/wakeup_reason.h>
 #include <trace/events/power.h>
-#include <linux/irq.h>
-#include <linux/irqdesc.h>
 
 #include "power.h"
 
@@ -117,7 +114,6 @@ void wakeup_source_drop(struct wakeup_source *ws)
 	if (!ws)
 		return;
 
-	del_timer_sync(&ws->timer);
 	__pm_relax(ws);
 }
 EXPORT_SYMBOL_GPL(wakeup_source_drop);
@@ -205,6 +201,13 @@ void wakeup_source_remove(struct wakeup_source *ws)
 	list_del_rcu(&ws->entry);
 	spin_unlock_irqrestore(&events_lock, flags);
 	synchronize_srcu(&wakeup_srcu);
+
+	del_timer_sync(&ws->timer);
+	/*
+	 * Clear timer.function to make wakeup_source_not_registered() treat
+	 * this wakeup source as not registered.
+	 */
+	ws->timer.function = NULL;
 }
 EXPORT_SYMBOL_GPL(wakeup_source_remove);
 
@@ -813,9 +816,8 @@ void pm_get_active_wakeup_sources(char *pending_wakeup_source, size_t max)
 	struct wakeup_source *ws, *last_active_ws = NULL;
 	int len = 0;
 	bool active = false;
-	int srcuidx;
 
-	srcuidx = srcu_read_lock(&wakeup_srcu);
+	rcu_read_lock();
 	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
 		if (ws->active && len < max) {
 			if (!active)
@@ -836,7 +838,7 @@ void pm_get_active_wakeup_sources(char *pending_wakeup_source, size_t max)
 				"Last active Wakeup Source: %s",
 				last_active_ws->name);
 	}
-	srcu_read_unlock(&wakeup_srcu, srcuidx);
+	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(pm_get_active_wakeup_sources);
 
@@ -878,7 +880,6 @@ bool pm_wakeup_pending(void)
 {
 	unsigned long flags;
 	bool ret = false;
-	char suspend_abort[MAX_SUSPEND_ABORT_LEN];
 
 	spin_lock_irqsave(&events_lock, flags);
 	if (events_check_enabled) {
@@ -892,10 +893,7 @@ bool pm_wakeup_pending(void)
 
 	if (ret) {
 		pr_info("PM: Wakeup pending, aborting suspend\n");
-		pm_get_active_wakeup_sources(suspend_abort,
-					     MAX_SUSPEND_ABORT_LEN);
-		log_suspend_abort_reason(suspend_abort);
-		pr_info("PM: %s\n", suspend_abort);
+		pm_print_active_wakeup_sources();
 	}
 
 	return ret || pm_abort_suspend;
@@ -916,21 +914,7 @@ void pm_wakeup_clear(void)
 
 void pm_system_irq_wakeup(unsigned int irq_number)
 {
-	struct irq_desc *desc;
-	const char *name = "null";
-
 	if (pm_wakeup_irq == 0) {
-		if (msm_show_resume_irq_mask) {
-			desc = irq_to_desc(irq_number);
-			if (desc == NULL)
-				name = "stray irq";
-			else if (desc->action && desc->action->name)
-				name = desc->action->name;
-
-			log_base_wakeup_reason(irq_number);
-			pr_warn("%s: %d triggered %s\n", __func__,
-					irq_number, name);
-		}
 		pm_wakeup_irq = irq_number;
 		pm_system_wakeup();
 	}

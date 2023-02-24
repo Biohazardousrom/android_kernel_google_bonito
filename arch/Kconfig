@@ -221,20 +221,6 @@ config GENERIC_SMP_IDLE_THREAD
 config GENERIC_IDLE_POLL_SETUP
        bool
 
-config ARCH_HAS_FORTIFY_SOURCE
-	bool
-	help
-	  An architecture should select this when it can successfully
-	  build and run with CONFIG_FORTIFY_SOURCE.
-
-config FORTIFY_COMPILE_CHECK
-	depends on ARCH_HAS_FORTIFY_SOURCE
-	bool
-	help
-	  Disable compile time size check for string routines as part
-	  of fortify source. Selecting this option will not enforce compile
-	  time size check for string functions.
-
 # Select if arch init_task initializer is different to init/init_task.c
 config ARCH_INIT_TASK
        bool
@@ -530,6 +516,7 @@ config LTO_CLANG
 	bool "Use clang Link Time Optimization (LTO) (EXPERIMENTAL)"
 	depends on ARCH_SUPPORTS_LTO_CLANG
 	depends on !FTRACE_MCOUNT_RECORD || HAVE_C_RECORDMCOUNT
+	depends on !KASAN
 	select LTO
 	select THIN_ARCHIVES
 	select LD_DEAD_CODE_DATA_ELIMINATION
@@ -573,32 +560,6 @@ config CFI_CLANG_SHADOW
 	help
 	  If you select this option, the kernel builds a fast look-up table of
 	  CFI check functions in loaded modules to reduce overhead.
-
-config ARCH_SUPPORTS_SAFESTACK
-	bool
-	help
-	  An architecture should select this if it supports clang SafeStack,
-	  has asm/safestack.h, and implements __safestack_pointer_address().
-
-config SAFESTACK
-	bool "Use clang SafeStack"
-	depends on ARCH_SUPPORTS_SAFESTACK
-	help
-	  This option enables clang SafeStack, which protects function return
-	  addresses against attacks based on stack buffer overflows.
-
-	  SafeStack splits the kernel stack into safe and unsafe parts. Safe
-	  stack is used only for data that's at compile time determined to be
-	  only accessed in a safe way. This prevents a buffer overflow in the
-	  unsafe stack from overwriting any data in the safe stack, including
-	  the return address.
-
-config SAFESTACK_COLORING
-	bool "Use clang SafeStack coloring (EXPERIMENTAL)"
-	depends on SAFESTACK
-	help
-	  This option enables clang SafeStack coloring, which reduces unsafe
-	  stack usage.
 
 config HAVE_ARCH_WITHIN_STACK_FRAMES
 	bool

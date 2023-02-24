@@ -44,52 +44,6 @@
 #define MAIR(attr, mt)	((attr) << ((mt) * 8))
 
 /*
- *	cpu_cache_off()
- *
- *	Turn the CPU D-cache off.
- */
-ENTRY(cpu_cache_off)
-	mrs	x0, sctlr_el1
-	bic	x0, x0, #1 << 2			// clear SCTLR.C
-	msr	sctlr_el1, x0
-	isb
-	ret
-ENDPROC(cpu_cache_off)
-
-/*
- *	cpu_reset(loc)
- *
- *	Perform a soft reset of the system.  Put the CPU into the same state
- *	as it would be if it had been reset, and branch to what would be the
- *	reset vector. It must be executed with the flat identity mapping.
- *
- *	- loc   - location to jump to for soft reset
- */
-	.align	5
-ENTRY(cpu_reset)
-	mrs	x1, sctlr_el1
-	bic	x1, x1, #1
-	msr	sctlr_el1, x1			// disable the MMU
-	isb
-	ret	x0
-ENDPROC(cpu_reset)
-
-ENTRY(cpu_soft_restart)
-	/* Save address of cpu_reset() and reset address */
-	mov	x19, x0
-	mov	x20, x1
-
-	/* Turn D-cache off */
-	bl	cpu_cache_off
-
-	/* Push out all dirty data, and ensure cache is empty */
-	bl	flush_cache_all
-
-	mov	x0, x20
-	ret	x19
-ENDPROC(cpu_soft_restart)
-
-/*
  *	cpu_do_idle()
  *
  *	Idle the processor (wait for interrupt).
@@ -116,7 +70,11 @@ ENTRY(cpu_do_suspend)
 	mrs	x8, mdscr_el1
 	mrs	x9, oslsr_el1
 	mrs	x10, sctlr_el1
+alternative_if_not ARM64_HAS_VIRT_HOST_EXTN
 	mrs	x11, tpidr_el1
+alternative_else
+	mrs	x11, tpidr_el2
+alternative_endif
 	mrs	x12, sp_el0
 	stp	x2, x3, [x0]
 	stp	x4, xzr, [x0, #16]
@@ -162,7 +120,11 @@ ENTRY(cpu_do_resume)
 	msr	mdscr_el1, x10
 
 	msr	sctlr_el1, x12
+alternative_if_not ARM64_HAS_VIRT_HOST_EXTN
 	msr	tpidr_el1, x13
+alternative_else
+	msr	tpidr_el2, x13
+alternative_endif
 	msr	sp_el0, x14
 	/*
 	 * Restore oslsr_el1 by writing oslar_el1
@@ -236,7 +198,8 @@ ENDPROC(idmap_cpu_replace_ttbr1)
 	dc	cvac, cur_\()\type\()p		// Ensure any existing dirty
 	dmb	sy				// lines are written back before
 	ldr	\type, [cur_\()\type\()p]	// loading the entry
-	tbz	\type, #0, next_\()\type	// Skip invalid entries
+	tbz	\type, #0, skip_\()\type	// Skip invalid and
+	tbnz	\type, #11, skip_\()\type	// non-global entries
 	.endm
 
 	.macro __idmap_kpti_put_pgtable_ent_ng, type
@@ -296,8 +259,9 @@ ENTRY(idmap_kpti_install_ng_mappings)
 	add	end_pgdp, cur_pgdp, #(PTRS_PER_PGD * 8)
 do_pgd:	__idmap_kpti_get_pgtable_ent	pgd
 	tbnz	pgd, #1, walk_puds
-	__idmap_kpti_put_pgtable_ent_ng	pgd
 next_pgd:
+	__idmap_kpti_put_pgtable_ent_ng	pgd
+skip_pgd:
 	add	cur_pgdp, cur_pgdp, #8
 	cmp	cur_pgdp, end_pgdp
 	b.ne	do_pgd
@@ -314,6 +278,15 @@ next_pgd:
 	msr	sctlr_el1, x18
 	isb
 
+	/*
+	 * Invalidate the local I-cache so that any instructions fetched
+	 * speculatively from the PoC are discarded, since they may have
+	 * been dynamically patched at the PoU.
+	 */
+	ic	iallu
+	dsb	nsh
+	isb
+
 	/* Set the flag to zero to indicate that we're all done */
 	str	wzr, [flag_ptr]
 	ret
@@ -325,8 +298,9 @@ walk_puds:
 	add	end_pudp, cur_pudp, #(PTRS_PER_PUD * 8)
 do_pud:	__idmap_kpti_get_pgtable_ent	pud
 	tbnz	pud, #1, walk_pmds
-	__idmap_kpti_put_pgtable_ent_ng	pud
 next_pud:
+	__idmap_kpti_put_pgtable_ent_ng	pud
+skip_pud:
 	add	cur_pudp, cur_pudp, 8
 	cmp	cur_pudp, end_pudp
 	b.ne	do_pud
@@ -345,8 +319,9 @@ walk_pmds:
 	add	end_pmdp, cur_pmdp, #(PTRS_PER_PMD * 8)
 do_pmd:	__idmap_kpti_get_pgtable_ent	pmd
 	tbnz	pmd, #1, walk_ptes
-	__idmap_kpti_put_pgtable_ent_ng	pmd
 next_pmd:
+	__idmap_kpti_put_pgtable_ent_ng	pmd
+skip_pmd:
 	add	cur_pmdp, cur_pmdp, #8
 	cmp	cur_pmdp, end_pmdp
 	b.ne	do_pmd
@@ -364,7 +339,7 @@ walk_ptes:
 	add	end_ptep, cur_ptep, #(PTRS_PER_PTE * 8)
 do_pte:	__idmap_kpti_get_pgtable_ent	pte
 	__idmap_kpti_put_pgtable_ent_ng	pte
-next_pte:
+skip_pte:
 	add	cur_ptep, cur_ptep, #8
 	cmp	cur_ptep, end_ptep
 	b.ne	do_pte
@@ -453,11 +428,7 @@ ENTRY(__cpu_setup)
 	/*
 	 * Prepare SCTLR
 	 */
-	adr	x5, crval
-	ldp	w5, w6, [x5]
-	mrs	x0, sctlr_el1
-	bic	x0, x0, x5			// clear bits
-	orr	x0, x0, x6			// set bits
+	mov_q	x0, SCTLR_EL1_SET
 	/*
 	 * Set/prepare TCR and TTBR. We use 512GB (39-bit) address range for
 	 * both user and kernel.
@@ -482,12 +453,8 @@ ENTRY(__cpu_setup)
 	cmp	x9, #2
 	b.lt	1f
 #ifdef CONFIG_ARM64_ERRATUM_1024718
-	/* Disable hardware DBM on Cortex-A55 r0p0, r0p1 & r1p0 */
-	cpu_midr_match MIDR_CORTEX_A55, MIDR_CPU_VAR_REV(0, 0), MIDR_CPU_VAR_REV(1, 0), x1, x2, x3, x4
-	cbnz	x1, 1f
-	/* Disable hardware DBM on Kryo3S */
-	cpu_midr_match MIDR_KRYO3S, MIDR_CPU_VAR_REV(7, 12), \
-			MIDR_CPU_VAR_REV(7, 13), x1, x2, x3, x4
+	/* Disable hardware DBM on Cortex-A55 all versions */
+	cpu_midr_match MIDR_CORTEX_A55, MIDR_CPU_VAR_REV(0, 0), MIDR_CPU_VAR_REV(0xf, 0xf), x1, x2, x3, x4
 	cbnz	x1, 1f
 #endif
 	orr	x10, x10, #TCR_HD		// hardware Dirty flag update
@@ -497,21 +464,3 @@ ENTRY(__cpu_setup)
 	msr	tcr_el1, x10
 	ret					// return to head.S
 ENDPROC(__cpu_setup)
-
-	/*
-	 * We set the desired value explicitly, including those of the
-	 * reserved bits. The values of bits EE & E0E were set early in
-	 * el2_setup, which are left untouched below.
-	 *
-	 *                 n n            T
-	 *       U E      WT T UD     US IHBS
-	 *       CE0      XWHW CZ     ME TEEA S
-	 * .... .IEE .... NEAI TE.I ..AD DEN0 ACAM
-	 * 0011 0... 1101 ..0. ..0. 10.. .0.. .... < hardware reserved
-	 * .... .1.. .... 01.1 11.1 ..01 0.01 1101 < software settings
-	 */
-	.type	crval, #object
-crval:
-	.word	0xfcffffff			// clear
-	.word	0x34d5d91d			// set
-	.popsection

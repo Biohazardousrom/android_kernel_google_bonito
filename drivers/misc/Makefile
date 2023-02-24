@@ -33,7 +33,6 @@ obj-$(CONFIG_DS1682)		+= ds1682.o
 obj-$(CONFIG_TI_DAC7512)	+= ti_dac7512.o
 obj-$(CONFIG_C2PORT)		+= c2port/
 obj-$(CONFIG_HMC6352)		+= hmc6352.o
-obj-$(CONFIG_CS40L2X_HAPTIC)	+= cs40l2x.o cs40l2x-tables.o
 obj-y				+= eeprom/
 obj-y				+= cb710/
 obj-$(CONFIG_SPEAR13XX_PCIE_GADGET)	+= spear13xx_pcie_gadget.o
@@ -50,22 +49,13 @@ obj-$(CONFIG_LATTICE_ECP3_CONFIG)	+= lattice-ecp3-config.o
 obj-$(CONFIG_SRAM)		+= sram.o
 obj-y				+= mic/
 obj-$(CONFIG_GENWQE)		+= genwqe/
-obj-$(CONFIG_HDCP_QSEECOM)	+= hdcp_qseecom.o
-obj-$(CONFIG_HDCP_QSEECOM)	+= msm_hdcp.o
-obj-$(CONFIG_QSEECOM)		+= qseecom.o
 obj-$(CONFIG_ECHO)		+= echo/
 obj-$(CONFIG_VEXPRESS_SYSCFG)	+= vexpress-syscfg.o
 obj-$(CONFIG_CXL_BASE)		+= cxl/
 obj-$(CONFIG_PANEL)             += panel.o
-obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o
-obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
 
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
-
-obj-$(CONFIG_NFC_ST21NFC)	+= st21nfc.o
-
-obj-$(CONFIG_CITADEL)		+= citadel-spi.o
 
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_core.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_bugs.o
@@ -74,12 +64,6 @@ lkdtm-$(CONFIG_LKDTM)		+= lkdtm_perms.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_rodata_objcopy.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_usercopy.o
 
-obj-y                           += mnh/
-obj-$(CONFIG_GOOGLE_EASEL)      += google-easel.o
-google-easel-objs               += google-easel-comm.o google-easel-comm-dma.o google-easel-comm-hw.o
-
-obj-y                           += st33/
-obj-$(CONFIG_ACCESS_RAMOOPS)    += access_ramoops.o
 CFLAGS_lkdtm_rodata.o		+= $(DISABLE_LTO)
 KCOV_INSTRUMENT_lkdtm_rodata.o	:= n
 
@@ -90,8 +74,3 @@ OBJCOPYFLAGS_lkdtm_rodata_objcopy.o := \
 targets += lkdtm_rodata.o lkdtm_rodata_objcopy.o
 $(obj)/lkdtm_rodata_objcopy.o: $(obj)/lkdtm_rodata.o FORCE
 	$(call if_changed,objcopy)
-
-# TODO: remove me b/62058353
-subdir-ccflags-y += \
-	-Wno-header-guard \
-	-Wno-ignored-attributes \

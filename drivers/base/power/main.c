@@ -1061,13 +1061,11 @@ static int __device_suspend_noirq(struct device *dev, pm_message_t state, bool a
 	}
 
 	error = dpm_run_callback(callback, dev, state, info);
-	if (!error) {
+	if (!error)
 		dev->power.is_noirq_suspended = true;
-	} else {
-		log_suspend_abort_reason("Callback failed on %s in %pF returned %d",
-					 dev_name(dev), callback, error);
+	else
 		async_error = error;
-	}
+
 Complete:
 	complete_all(&dev->power.completion);
 	TRACE_SUSPEND(error);
@@ -1210,13 +1208,10 @@ static int __device_suspend_late(struct device *dev, pm_message_t state, bool as
 	}
 
 	error = dpm_run_callback(callback, dev, state, info);
-	if (!error) {
+	if (!error)
 		dev->power.is_late_suspended = true;
-	} else {
-		log_suspend_abort_reason("Callback failed on %s in %pF returned %d",
-					 dev_name(dev), callback, error);
+	else
 		async_error = error;
-	}
 
 Complete:
 	TRACE_SUSPEND(error);
@@ -1359,6 +1354,7 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 	pm_callback_t callback = NULL;
 	char *info = NULL;
 	int error = 0;
+	char suspend_abort[MAX_SUSPEND_ABORT_LEN];
 	DECLARE_DPM_WATCHDOG_ON_STACK(wd);
 
 	TRACE_DEVICE(dev);
@@ -1366,25 +1362,39 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 
 	dpm_wait_for_children(dev, async);
 
-	if (async_error)
+	if (async_error) {
+		dev->power.direct_complete = false;
 		goto Complete;
+	}
 
 	/*
-	 * If a device configured to wake up the system from sleep states
-	 * has been suspended at run time and there's a resume request pending
-	 * for it, this is equivalent to the device signaling wakeup, so the
-	 * system suspend operation should be aborted.
+	 * Wait for possible runtime PM transitions of the device in progress
+	 * to complete and if there's a runtime resume request pending for it,
+	 * resume it before proceeding with invoking the system-wide suspend
+	 * callbacks for it.
+	 *
+	 * If the system-wide suspend callbacks below change the configuration
+	 * of the device, they must disable runtime PM for it or otherwise
+	 * ensure that its runtime-resume callbacks will not be confused by that
+	 * change in case they are invoked going forward.
 	 */
-	if (pm_runtime_barrier(dev) && device_may_wakeup(dev))
-		pm_wakeup_event(dev, 0);
+	pm_runtime_barrier(dev);
 
 	if (pm_wakeup_pending()) {
+		pm_get_active_wakeup_sources(suspend_abort,
+			MAX_SUSPEND_ABORT_LEN);
+		log_suspend_abort_reason(suspend_abort);
+		dev->power.direct_complete = false;
 		async_error = -EBUSY;
 		goto Complete;
 	}
 
 	if (dev->power.syscore)
 		goto Complete;
+
+	/* Avoid direct_complete to let wakeup_path propagate. */
+	if (device_may_wakeup(dev) || dev->power.wakeup_path)
+		dev->power.direct_complete = false;
 
 	if (dev->power.direct_complete) {
 		if (pm_runtime_status_suspended(dev)) {
@@ -1460,9 +1470,6 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 
 			spin_unlock_irq(&parent->power.lock);
 		}
-	} else {
-		log_suspend_abort_reason("Callback failed on %s in %pF returned %d",
-					 dev_name(dev), callback, error);
 	}
 
 	device_unlock(dev);
@@ -1672,9 +1679,6 @@ int dpm_prepare(pm_message_t state)
 			printk(KERN_INFO "PM: Device %s not prepared "
 				"for power transition: code %d\n",
 				dev_name(dev), error);
-			log_suspend_abort_reason("Device %s not prepared "
-						 "for power transition: code %d",
-						 dev_name(dev), error);
 			put_device(dev);
 			break;
 		}
@@ -1767,7 +1771,9 @@ static bool pm_ops_is_empty(const struct dev_pm_ops *ops)
 
 void device_pm_check_callbacks(struct device *dev)
 {
-	spin_lock_irq(&dev->power.lock);
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->power.lock, flags);
 	dev->power.no_pm_callbacks =
 		(!dev->bus || (pm_ops_is_empty(dev->bus->pm) &&
 		 !dev->bus->suspend && !dev->bus->resume)) &&
@@ -1777,5 +1783,5 @@ void device_pm_check_callbacks(struct device *dev)
 		(!dev->pm_domain || pm_ops_is_empty(&dev->pm_domain->ops)) &&
 		(!dev->driver || (pm_ops_is_empty(dev->driver->pm) &&
 		 !dev->driver->suspend && !dev->driver->resume));
-	spin_unlock_irq(&dev->power.lock);
+	spin_unlock_irqrestore(&dev->power.lock, flags);
 }

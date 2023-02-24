@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -615,7 +615,8 @@ static int cam_ife_hw_mgr_acquire_res_ife_out_rdi(
 	ife_out_res->hw_res[0] = vfe_acquire.vfe_out.rsrc_node;
 	ife_out_res->is_dual_vfe = 0;
 	ife_out_res->res_id = vfe_out_res_id;
-	ife_out_res->res_type = CAM_ISP_RESOURCE_VFE_OUT;
+	ife_out_res->res_type = (enum cam_ife_hw_mgr_res_type)
+		CAM_ISP_RESOURCE_VFE_OUT;
 	ife_src_res->child[ife_src_res->num_children++] = ife_out_res;
 
 	return 0;
@@ -703,7 +704,8 @@ static int cam_ife_hw_mgr_acquire_res_ife_out_pixel(
 				ife_out_res->hw_res[j]->res_id);
 
 		}
-		ife_out_res->res_type = CAM_ISP_RESOURCE_VFE_OUT;
+		ife_out_res->res_type = (enum cam_ife_hw_mgr_res_type)
+			CAM_ISP_RESOURCE_VFE_OUT;
 		ife_out_res->res_id = out_port->res_type;
 		ife_out_res->parent = ife_src_res;
 		ife_src_res->child[ife_src_res->num_children++] = ife_out_res;
@@ -816,7 +818,8 @@ static int cam_ife_hw_mgr_acquire_res_ife_src(
 			CAM_ERR(CAM_ISP, "Wrong IFE CSID Resource Node");
 			goto err;
 		}
-		ife_src_res->res_type = vfe_acquire.rsrc_type;
+		ife_src_res->res_type = (enum cam_ife_hw_mgr_res_type)
+			vfe_acquire.rsrc_type;
 		ife_src_res->res_id = vfe_acquire.vfe_in.res_id;
 		ife_src_res->is_dual_vfe = csid_res->is_dual_vfe;
 
@@ -992,7 +995,8 @@ static int cam_ife_hw_mgr_acquire_res_ife_csid_ipp(
 	csid_acquire.in_port = in_port;
 	csid_acquire.out_port = in_port->data;
 
-	csid_res->res_type = CAM_ISP_RESOURCE_PIX_PATH;
+	csid_res->res_type = (enum cam_ife_hw_mgr_res_type)
+		CAM_ISP_RESOURCE_PIX_PATH;
 	csid_res->res_id = CAM_IFE_PIX_PATH_RES_IPP;
 	csid_res->is_dual_vfe = in_port->usage_type;
 
@@ -1117,15 +1121,14 @@ static int cam_ife_hw_mgr_acquire_res_ife_csid_rdi(
 		if (!cam_ife_hw_mgr_is_rdi_res(out_port->res_type))
 			continue;
 
-			/* get cid resource */
-			rc = cam_ife_mgr_acquire_cid_res(ife_ctx,
-				in_port, &cid_res_id,
-				cam_ife_hw_mgr_get_ife_csid_rdi_res_type(
-				out_port->res_type));
-			if (rc) {
-				CAM_ERR(CAM_ISP,
-					"Acquire IFE CID resource Failed");
-				goto err;
+		/* get cid resource */
+		rc = cam_ife_mgr_acquire_cid_res(ife_ctx,
+			in_port, &cid_res_id,
+			cam_ife_hw_mgr_get_ife_csid_rdi_res_type(
+			out_port->res_type));
+		if (rc) {
+			CAM_ERR(CAM_ISP, "Acquire IFE CID resource Failed");
+			goto err;
 		}
 
 		rc = cam_ife_hw_mgr_get_res(&ife_ctx->free_res_list,
@@ -1186,7 +1189,8 @@ static int cam_ife_hw_mgr_acquire_res_ife_csid_rdi(
 				goto err;
 			}
 
-			csid_res->res_type = CAM_ISP_RESOURCE_PIX_PATH;
+			csid_res->res_type = (enum cam_ife_hw_mgr_res_type)
+				CAM_ISP_RESOURCE_PIX_PATH;
 			csid_res->res_id = csid_acquire.res_id;
 			csid_res->is_dual_vfe = 0;
 			csid_res->hw_res[0] = csid_acquire.node_res;
@@ -1367,7 +1371,7 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv,
 	uint32_t                           num_rdi_port_per_in = 0;
 	uint32_t                           total_pix_port = 0;
 	uint32_t                           total_rdi_port = 0;
-	uint32_t                           in_port_length = 0;
+        uint32_t                           in_port_length = 0;
 
 	CAM_DBG(CAM_ISP, "Enter...");
 
@@ -1428,7 +1432,7 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv,
 			isp_resource[i].res_hdl,
 			isp_resource[i].length);
 
-		in_port_length = sizeof(struct cam_isp_in_port_info);
+                in_port_length = sizeof(struct cam_isp_in_port_info);
 
 		if (in_port_length > isp_resource[i].length) {
 			CAM_ERR(CAM_ISP, "buffer size is not enough");
@@ -1438,6 +1442,7 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv,
 
 		in_port = memdup_user((void __user *)isp_resource[i].res_hdl,
 			isp_resource[i].length);
+
 		if (!IS_ERR(in_port)) {
 			in_port_length = sizeof(struct cam_isp_in_port_info) +
 				(in_port->num_out_res - 1) *
@@ -2200,7 +2205,7 @@ static int cam_ife_mgr_start_hw(void *hw_mgr_priv, void *start_hw_args)
 	CAM_DBG(CAM_ISP, "Exit...(success)");
 	return 0;
 err:
-	stop_hw_method.hw_stop_cmd = CAM_CSID_HALT_IMMEDIATELY;
+	stop_hw_method.hw_stop_cmd = CAM_ISP_HW_STOP_IMMEDIATELY;
 	stop_args.ctxt_to_hw_map = start_args->ctxt_to_hw_map;
 	stop_args.args = (void *)(&stop_hw_method);
 	cam_ife_mgr_stop_hw(hw_mgr_priv, &stop_args);
@@ -2545,7 +2550,8 @@ static int cam_ife_mgr_prepare_hw_update(void *hw_mgr_priv,
 	ctx = (struct cam_ife_hw_mgr_ctx *) prepare->ctxt_to_hw_map;
 	hw_mgr = (struct cam_ife_hw_mgr *)hw_mgr_priv;
 
-	rc = cam_packet_util_validate_packet(prepare->packet);
+	rc = cam_packet_util_validate_packet(prepare->packet,
+		prepare->remain_len);
 	if (rc)
 		return rc;
 

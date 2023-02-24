@@ -18,8 +18,6 @@
  * General Public License.
  */
 
-#define __FS_HAS_ENCRYPTION IS_ENABLED(CONFIG_FS_ENCRYPTION)
-#include <linux/fscrypt.h>
 #include "sdcardfs.h"
 #include "linux/delay.h"
 
@@ -43,8 +41,6 @@ void sdcardfs_destroy_dentry_cache(void)
 
 void free_dentry_private_data(struct dentry *dentry)
 {
-	if (!dentry || !dentry->d_fsdata)
-		return;
 	kmem_cache_free(sdcardfs_dentry_cachep, dentry->d_fsdata);
 	dentry->d_fsdata = NULL;
 }
@@ -278,7 +274,6 @@ static struct dentry *__sdcardfs_lookup(struct dentry *dentry,
 	lower_dir_dentry = lower_parent_path->dentry;
 	lower_dir_mnt = lower_parent_path->mnt;
 
-retry_lookup:
 	/* Use vfs_path_lookup to check if the dentry exists or not */
 	err = vfs_path_lookup(lower_dir_dentry, lower_dir_mnt, name->name, 0,
 				&lower_path);
@@ -382,14 +377,8 @@ put_name:
 		 * dentry then. Don't confuse the lower filesystem by forcing
 		 * one on it now...
 		 */
-		struct inode *lower_dir = d_inode(lower_dir_dentry);
-
-		if (IS_ENCRYPTED(lower_dir) &&
-				!fscrypt_has_encryption_key(lower_dir)) {
-			err = -ENOENT;
-			goto out;
-		}
-		goto retry_lookup;
+		err = -ENOENT;
+		goto out;
 	}
 
 	lower_path.dentry = lower_dentry;

@@ -24,7 +24,6 @@ ampire	Ampire Co., Ltd.
 ams	AMS AG
 amstaos	AMS-Taos Inc.
 analogix	Analogix Semiconductor, Inc.
-android	Google
 apm	Applied Micro Circuits Corporation (APM)
 aptina	Aptina Imaging
 arasan	Arasan Chip Systems
@@ -118,7 +117,6 @@ google	Google, Inc.
 grinn	Grinn
 gumstix	Gumstix, Inc.
 gw	Gateworks Corporation
-halo	Halo Microelectronics Co., Ltd.
 hannstar	HannStar Display Corporation
 haoyu	Haoyu Microelectronic Co. Ltd.
 hardkernel	Hardkernel Co., Ltd
@@ -162,7 +160,6 @@ linaro	Linaro Limited
 linux	Linux-specific binding
 lltc	Linear Technology Corporation
 lsi	LSI Corp. (LSI Logic)
-lt	Lontium Semiconductor Corporation
 marvell	Marvell Technology Group Ltd.
 maxim	Maxim Integrated Products
 meas	Measurement Specialties
@@ -265,7 +262,6 @@ sony	Sony Corporation
 spansion	Spansion Inc.
 sprd	Spreadtrum Communications Inc.
 st	STMicroelectronics
-stm	STMicroelectronics
 starry	Starry Electronic Technology (ShenZhen) Co., LTD
 startek	Startek
 ste	ST-Ericsson
@@ -275,7 +271,6 @@ sunchip	Shenzhen Sunchip Technology Co., Ltd
 SUNW	Sun Microsystems, Inc
 swir	Sierra Wireless
 syna	Synaptics Inc.
-synaptics	Synaptics Inc.
 synology	Synology, Inc.
 tbs	TBS Technologies
 tcg	Trusted Computing Group

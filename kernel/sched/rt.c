@@ -14,6 +14,7 @@
 #include "walt.h"
 
 int sched_rr_timeslice = RR_TIMESLICE;
+int sysctl_sched_rr_timeslice = (MSEC_PER_SEC / HZ) * RR_TIMESLICE;
 
 static int do_sched_rt_period_timer(struct rt_bandwidth *rt_b, int overrun);
 
@@ -1445,8 +1446,10 @@ static int find_lowest_rq(struct task_struct *task);
 /*
  * Return whether the task on the given cpu is currently non-preemptible
  * while handling a potentially long softint, or if the task is likely
- * to block preemptions soon because it is a ksoftirq thread that is
- * handling slow softints.
+ * to block preemptions soon because (a) it is a ksoftirq thread that is
+ * handling slow softints, (b) it is idle and therefore likely to start
+ * processing the irqs immediately, (c) the cpu is currently handling hard irqs
+ * and will soon move on to the softirq handler.
  */
 bool
 task_may_not_preempt(struct task_struct *task, int cpu)
@@ -1456,14 +1459,15 @@ task_may_not_preempt(struct task_struct *task, int cpu)
 	struct task_struct *cpu_ksoftirqd = per_cpu(ksoftirqd, cpu);
 
 	return ((softirqs & LONG_SOFTIRQ_MASK) &&
-		(task == cpu_ksoftirqd ||
-		 task_thread_info(task)->preempt_count & SOFTIRQ_MASK));
+		(task == cpu_ksoftirqd || is_idle_task(task) ||
+		 (task_thread_info(task)->preempt_count
+			& (HARDIRQ_MASK | SOFTIRQ_MASK))));
 }
 
 static int
 select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
 {
-	struct task_struct *curr;
+	struct task_struct *curr, *tgt_task;
 	struct rq *rq;
 	bool may_not_preempt;
 
@@ -1514,6 +1518,17 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
 	     (tsk_nr_cpus_allowed(curr) < 2 ||
 	      curr->prio <= p->prio))) {
 		int target = find_lowest_rq(p);
+
+		/*
+		 * Check once for losing a race with the other core's irq
+		 * handler. This does not happen frequently, but it can avoid
+		 * delaying the execution of the RT task in those cases.
+		 */
+		if (target != -1) {
+			tgt_task = READ_ONCE(cpu_rq(target)->curr);
+			if (task_may_not_preempt(tgt_task, target))
+				target = find_lowest_rq(p);
+		}
 
 		/*
 		 * If cpu is non-preemptible, prefer remote cpu
@@ -1625,7 +1640,7 @@ static struct task_struct *_pick_next_task_rt(struct rq *rq)
 }
 
 static struct task_struct *
-pick_next_task_rt(struct rq *rq, struct task_struct *prev, struct pin_cookie cookie)
+pick_next_task_rt(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
 	struct task_struct *p;
 	struct rt_rq *rt_rq = &rq->rt;
@@ -1637,9 +1652,9 @@ pick_next_task_rt(struct rq *rq, struct task_struct *prev, struct pin_cookie coo
 		 * disabled avoiding further scheduler activity on it and we're
 		 * being very careful to re-start the picking loop.
 		 */
-		lockdep_unpin_lock(&rq->lock, cookie);
+		rq_unpin_lock(rq, rf);
 		pull_rt_task(rq);
-		lockdep_repin_lock(&rq->lock, cookie);
+		rq_repin_lock(rq, rf);
 		/*
 		 * pull_rt_task() can drop (and re-acquire) rq->lock; this
 		 * means a dl or stop task can slip in, in which case we need
@@ -1772,10 +1787,8 @@ static int find_lowest_rq(struct task_struct *task)
 				  sched_boost_policy() : SCHED_BOOST_NONE;
 		best_capacity = placement_boost ? 0 : ULONG_MAX;
 
-		rcu_read_lock();
 		sd = rcu_dereference(per_cpu(sd_ea, start_cpu));
 		if (!sd) {
-			rcu_read_unlock();
 			goto noea;
 		}
 
@@ -1805,7 +1818,6 @@ static int find_lowest_rq(struct task_struct *task)
 				}
 			}
 		} while (sg = sg->next, sg != sd->groups);
-		rcu_read_unlock();
 
 		if (sg_target) {
 			cpumask_and(&search_cpu, lowest_mask,
@@ -1924,7 +1936,6 @@ noea:
 	if (!cpumask_test_cpu(this_cpu, lowest_mask))
 		this_cpu = -1; /* Skip this_cpu opt if not among lowest */
 
-	rcu_read_lock();
 	for_each_domain(cpu, sd) {
 		if (sd->flags & SD_WAKE_AFFINE) {
 			int best_cpu;
@@ -1935,19 +1946,16 @@ noea:
 			 */
 			if (this_cpu != -1 &&
 			    cpumask_test_cpu(this_cpu, sched_domain_span(sd))) {
-				rcu_read_unlock();
 				return this_cpu;
 			}
 
 			best_cpu = cpumask_first_and(lowest_mask,
 						     sched_domain_span(sd));
 			if (best_cpu < nr_cpu_ids) {
-				rcu_read_unlock();
 				return best_cpu;
 			}
 		}
 	}
-	rcu_read_unlock();
 
 	/*
 	 * And finally, if there were no matches within the domains
@@ -1971,7 +1979,9 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
 	int cpu;
 
 	for (tries = 0; tries < RT_MAX_TRIES; tries++) {
+		rcu_read_lock();
 		cpu = find_lowest_rq(task);
+		rcu_read_unlock();
 
 		if ((cpu == -1) || (cpu == rq->cpu))
 			break;

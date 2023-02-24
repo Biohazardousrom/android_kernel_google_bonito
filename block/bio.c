@@ -155,7 +155,7 @@ out:
 
 unsigned int bvec_nr_vecs(unsigned short idx)
 {
-	return bvec_slabs[idx].nr_vecs;
+	return bvec_slabs[--idx].nr_vecs;
 }
 
 void bvec_free(mempool_t *pool, struct bio_vec *bv, unsigned int idx)
@@ -565,18 +565,6 @@ inline int bio_phys_segments(struct request_queue *q, struct bio *bio)
 }
 EXPORT_SYMBOL(bio_phys_segments);
 
-static inline void bio_clone_crypt_key(struct bio *dst, const struct bio *src)
-{
-#ifdef CONFIG_PFK
-	dst->bi_iter.bi_dun = src->bi_iter.bi_dun;
-#ifdef CONFIG_DM_DEFAULT_KEY
-	dst->bi_crypt_key = src->bi_crypt_key;
-	dst->bi_crypt_skip = src->bi_crypt_skip;
-#endif
-	dst->bi_dio_inode = src->bi_dio_inode;
-#endif
-}
-
 /**
  * 	__bio_clone_fast - clone a bio that shares the original bio's biovec
  * 	@bio: destination bio
@@ -601,11 +589,6 @@ void __bio_clone_fast(struct bio *bio, struct bio *bio_src)
 	bio->bi_opf = bio_src->bi_opf;
 	bio->bi_iter = bio_src->bi_iter;
 	bio->bi_io_vec = bio_src->bi_io_vec;
-
-#ifdef CONFIG_PFK
-	bio->bi_dio_inode = bio_src->bi_dio_inode;
-#endif
-	bio_clone_crypt_key(bio, bio_src);
 
 	bio_clone_blkcg_association(bio, bio_src);
 }
@@ -712,8 +695,6 @@ struct bio *bio_clone_bioset(struct bio *bio_src, gfp_t gfp_mask,
 			return NULL;
 		}
 	}
-
-	bio_clone_crypt_key(bio, bio_src);
 
 	bio_clone_blkcg_association(bio, bio_src);
 
@@ -868,6 +849,9 @@ int bio_add_page(struct bio *bio, struct page *page,
 	bio->bi_vcnt++;
 done:
 	bio->bi_iter.bi_size += len;
+
+	if (!bio_flagged(bio, BIO_WORKINGSET) && unlikely(PageWorkingset(page)))
+		bio_set_flag(bio, BIO_WORKINGSET);
 	return len;
 }
 EXPORT_SYMBOL(bio_add_page);
@@ -1233,8 +1217,11 @@ struct bio *bio_copy_user_iov(struct request_queue *q,
 			}
 		}
 
-		if (bio_add_pc_page(q, bio, page, bytes, offset) < bytes)
+		if (bio_add_pc_page(q, bio, page, bytes, offset) < bytes) {
+			if (!map_data)
+				__free_page(page);
 			break;
+		}
 
 		len -= bytes;
 		offset = 0;
@@ -1554,7 +1541,7 @@ struct bio *bio_copy_kern(struct request_queue *q, void *data, unsigned int len,
 		if (bytes > len)
 			bytes = len;
 
-		page = alloc_page(q->bounce_gfp | gfp_mask);
+		page = alloc_page(q->bounce_gfp | __GFP_ZERO | gfp_mask);
 		if (!page)
 			goto cleanup;
 

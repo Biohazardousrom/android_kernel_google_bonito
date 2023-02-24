@@ -44,7 +44,6 @@
 #include <linux/hardirq.h>
 #include <linux/jiffies.h>
 #include <linux/workqueue.h>
-#include <linux/vmalloc.h>
 
 #include "internal.h"
 
@@ -585,8 +584,8 @@ static void pstore_console_write(struct console *con, const char *s, unsigned c)
 		} else {
 			spin_lock_irqsave(&psinfo->buf_lock, flags);
 		}
-		memcpy(psinfo->buf, s, c);
-		psinfo->write(PSTORE_TYPE_CONSOLE, 0, &id, 0, 0, 0, c, psinfo);
+		psinfo->write_buf(PSTORE_TYPE_CONSOLE, 0, &id, 0,
+				  s, 0, c, psinfo);
 		spin_unlock_irqrestore(&psinfo->buf_lock, flags);
 		s += c;
 		c = e - s;
@@ -788,7 +787,7 @@ void pstore_get_records(int quiet)
 				if (ecc_notice_size)
 					memcpy(big_oops_buf + unzipped_len,
 					       buf + size, ecc_notice_size);
-				vfree(buf);
+				kfree(buf);
 				buf = big_oops_buf;
 				size = unzipped_len;
 				compressed = false;
@@ -803,7 +802,7 @@ void pstore_get_records(int quiet)
 				   time, psi);
 		if (unzipped_len < 0) {
 			/* Free buffer other than big oops */
-			vfree(buf);
+			kfree(buf);
 			buf = NULL;
 		} else
 			unzipped_len = -1;

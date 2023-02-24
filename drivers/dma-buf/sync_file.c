@@ -152,12 +152,6 @@ static int sync_file_set_fence(struct sync_file *sync_file,
 			return -ENOMEM;
 
 		sync_file->fence = &array->base;
-
-		/*
-		 * Register for callbacks so that we know when each fence
-		 * in the array is signaled
-		 */
-		fence_enable_sw_signaling(sync_file->fence);
 	}
 
 	return 0;
@@ -210,7 +204,7 @@ static struct sync_file *sync_file_merge(const char *name, struct sync_file *a,
 	a_fences = get_fences(a, &a_num_fences);
 	b_fences = get_fences(b, &b_num_fences);
 	if (a_num_fences > INT_MAX - b_num_fences)
-		return NULL;
+		goto err;
 
 	num_fences = a_num_fences + b_num_fences;
 
@@ -305,7 +299,8 @@ static unsigned int sync_file_poll(struct file *file, poll_table *wait)
 
 	poll_wait(file, &sync_file->wq, wait);
 
-	if (!test_and_set_bit(POLL_ENABLED, &sync_file->flags)) {
+	if (list_empty(&sync_file->cb.node) &&
+	    !test_and_set_bit(POLL_ENABLED, &sync_file->flags)) {
 		if (fence_add_callback(sync_file->fence, &sync_file->cb,
 					   fence_check_cb_func) < 0)
 			wake_up_all(&sync_file->wq);

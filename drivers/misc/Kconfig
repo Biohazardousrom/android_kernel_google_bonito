@@ -479,23 +479,6 @@ config SRAM
 	  the genalloc API. It is supposed to be used for small on-chip SRAM
 	  areas found on many SoCs.
 
-config HDCP_QSEECOM
-	tristate "QTI High-Bandwidth Digital Content Protection Module"
-	help
-	  This module implements HDCP 2.2 features over external interfaces
-	  such as the DisplayPort interface. It exposes APIs for the interface
-	  driver to communicate with QTI Secure Execution Environment (QSEE)
-	  via the QSEECOM Driver and also communicates with the Receiver via
-	  APIs exposed by the interface driver.
-
-config QSEECOM
-        tristate "QTI Secure Execution Communicator driver"
-        help
-          Provides a communication interface between userspace and
-          QTI Secure Execution Environment (QSEE) using Secure Channel
-          Manager (SCM) interface. It exposes APIs for both userspace and
-          kernel clients.
-
 config VEXPRESS_SYSCFG
 	bool "Versatile Express System Configuration driver"
 	depends on VEXPRESS_CONFIG
@@ -804,62 +787,6 @@ config MEMORY_STATE_TIME
 	help
 	  Memory time statistics exported to /sys/kernel/memory_state_time
 
-config QPNP_MISC
-	tristate "QPNP Misc Peripheral"
-	depends on MFD_SPMI_PMIC
-	help
-	  Say 'y' here to include support for the QTI QPNP MISC
-	  peripheral. The MISC peripheral holds the USB ID interrupt
-	  and the driver provides an API to check if this interrupt
-	  is available on the current PMIC chip.
-
-config NFC_ST21NFC
-	tristate "ST Microelectronics ST21NFC NFC Controller Driver"
-	depends on I2C
-	---help---
-	  ST Microelectronics ST21NFC Near Field Communication controller support
-
-config CITADEL
-	tristate "Google Citadel"
-	depends on SPI
-	---help---
-	  Say Y here if you have a Citadel security microcontroller from Google Inc.
-	  It will be accessible using a TPM-style transport interface from within
-	  Linux.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called citadel-spi.
-
-config GOOGLE_EASEL
-	tristate "Google Easel/Paintbox Coprocessor Support"
-	help
-	  Say 'y' if platform has the Paintbox IPU on an Easel
-	  coprocessor, aka MonetteHill. This config is used to enable the
-	  communications driver support, but can also be used for future
-	  driver work.
-
-config GOOGLE_EASEL_AP
-	bool "Local system is Application Processor / Android"
-	depends on GOOGLE_EASEL
-	help
-	  Say 'y' if this kernel is for the AP/Android side of the link.  Say
-	  'n' if this kernel is for the Easel/MonetteHill side of the link.
-
-config CS40L2X_HAPTIC
-	tristate "Cirrus Logic CS40L2X haptics support"
-	depends on I2C
-	select REGMAP_I2C
-	help
-	  Say Y to enable support for the CS CS40L2X haptics driver.
-
-	  To compile this driver as a module, choose M here.
-
-config ACCESS_RAMOOPS
-	tristate "Driver to allow access for decrypting encrypted ramoops"
-	depends on PSTORE_CONSOLE
-	help
-	  Say 'y' if ramoops is encrypted.
-
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
@@ -872,6 +799,4 @@ source "drivers/misc/mic/Kconfig"
 source "drivers/misc/genwqe/Kconfig"
 source "drivers/misc/echo/Kconfig"
 source "drivers/misc/cxl/Kconfig"
-source "drivers/misc/mnh/Kconfig"
-source "drivers/misc/st33/Kconfig"
 endmenu

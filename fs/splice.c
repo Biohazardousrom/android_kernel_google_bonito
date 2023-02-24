@@ -710,7 +710,7 @@ iter_file_splice_write(struct pipe_inode_info *pipe, struct file *out,
 	int nbufs = pipe->buffers;
 	struct bio_vec *array = kcalloc(nbufs, sizeof(struct bio_vec),
 					GFP_KERNEL);
-	ssize_t ret = -EINVAL;
+	ssize_t ret;
 
 	if (unlikely(!array))
 		return -ENOMEM;
@@ -1585,7 +1585,11 @@ retry:
 			 * Get a reference to this pipe buffer,
 			 * so we can copy the contents over.
 			 */
-			pipe_buf_get(ipipe, ibuf);
+			if (!pipe_buf_get(ipipe, ibuf)) {
+				if (ret == 0)
+					ret = -EFAULT;
+				break;
+			}
 			*obuf = *ibuf;
 
 			/*
@@ -1593,6 +1597,8 @@ retry:
 			 * prevent multiple steals of this page.
 			 */
 			obuf->flags &= ~PIPE_BUF_FLAG_GIFT;
+
+			pipe_buf_mark_unmergeable(obuf);
 
 			obuf->len = len;
 			opipe->nrbufs++;
@@ -1657,7 +1663,11 @@ static int link_pipe(struct pipe_inode_info *ipipe,
 		 * Get a reference to this pipe buffer,
 		 * so we can copy the contents over.
 		 */
-		pipe_buf_get(ipipe, ibuf);
+		if (!pipe_buf_get(ipipe, ibuf)) {
+			if (ret == 0)
+				ret = -EFAULT;
+			break;
+		}
 
 		obuf = opipe->bufs + nbuf;
 		*obuf = *ibuf;
@@ -1667,6 +1677,8 @@ static int link_pipe(struct pipe_inode_info *ipipe,
 		 * prevent multiple steals of this page.
 		 */
 		obuf->flags &= ~PIPE_BUF_FLAG_GIFT;
+
+		pipe_buf_mark_unmergeable(obuf);
 
 		if (obuf->len > len)
 			obuf->len = len;

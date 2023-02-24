@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -46,6 +46,8 @@
 #define LPASS_BE_VOICE2_PLAYBACK_TX "VOICE2_PLAYBACK_TX"
 #define LPASS_BE_INCALL_RECORD_RX "INCALL_RECORD_RX"
 #define LPASS_BE_INCALL_RECORD_TX "INCALL_RECORD_TX"
+#define LPASS_BE_PROXY_RX "PROXY_RX"
+#define LPASS_BE_PROXY_TX "PROXY_TX"
 #define LPASS_BE_SEC_I2S_RX "SECONDARY_I2S_RX"
 #define LPASS_BE_SPDIF_RX "SPDIF_RX"
 
@@ -397,6 +399,8 @@ enum {
 	MSM_BACKEND_DAI_INT5_MI2S_TX,
 	MSM_BACKEND_DAI_INT6_MI2S_RX,
 	MSM_BACKEND_DAI_INT6_MI2S_TX,
+	MSM_BACKEND_DAI_PROXY_RX,
+	MSM_BACKEND_DAI_PROXY_TX,
 	MSM_BACKEND_DAI_MAX,
 };
 
@@ -414,6 +418,7 @@ enum {
 	EXT_EC_REF_QUAT_MI2S_TX,
 	EXT_EC_REF_QUIN_MI2S_TX,
 	EXT_EC_REF_SLIM_1_TX,
+	EXT_EC_REF_QUAT_TDM_RX_0,
 };
 
 #define INVALID_SESSION -1
@@ -523,4 +528,6 @@ int msm_pcm_routing_reg_stream_app_type_cfg(
 int msm_pcm_routing_get_stream_app_type_cfg(
 	int fedai_id, int session_type, int *be_id,
 	struct msm_pcm_stream_app_type_cfg *cfg_data);
+
+int msm_pcm_routing_is_flick_port(int port_id);
 #endif /*_MSM_PCM_H*/

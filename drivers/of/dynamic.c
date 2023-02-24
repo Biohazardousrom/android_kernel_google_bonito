@@ -16,11 +16,6 @@
 
 #include "of_private.h"
 
-static struct device_node *kobj_to_device_node(struct kobject *kobj)
-{
-	return container_of(kobj, struct device_node, kobj);
-}
-
 /**
  * of_node_get() - Increment refcount of a node
  * @node:	Node to inc refcount, NULL is supported to simplify writing of

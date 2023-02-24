@@ -67,21 +67,6 @@ struct bio {
 #endif
 	};
 
-#ifdef CONFIG_PFK
-	/* Encryption key to use (NULL if none) */
-	const struct blk_encryption_key	*bi_crypt_key;
-
-#ifdef CONFIG_DM_DEFAULT_KEY
-	int bi_crypt_skip;
-#endif
-
-	/*
-	 * When using dircet-io (O_DIRECT), we can't get the inode from a bio
-	 * by walking bio->bi_io_vec->bv_page->mapping->host
-	 * since the page is anon.
-	 */
-	struct inode		*bi_dio_inode;
-#endif
 	unsigned short		bi_vcnt;	/* how many bio_vec's */
 
 	/*
@@ -132,24 +117,16 @@ struct bio {
 #define BIO_BOUNCED	3	/* bio is a bounce bio */
 #define BIO_USER_MAPPED 4	/* contains user pages */
 #define BIO_NULL_MAPPED 5	/* contains invalid user pages */
-#define BIO_QUIET	6	/* Make BIO Quiet */
-#define BIO_CHAIN	7	/* chained bio, ->bi_remaining in effect */
-#define BIO_REFFED	8	/* bio has elevated ->bi_cnt */
+#define BIO_WORKINGSET	6	/* contains userspace workingset pages */
+#define BIO_QUIET	7	/* Make BIO Quiet */
+#define BIO_CHAIN	8	/* chained bio, ->bi_remaining in effect */
+#define BIO_REFFED	9	/* bio has elevated ->bi_cnt */
 
 /*
  * Flags starting here get preserved by bio_reset() - this includes
  * BVEC_POOL_IDX()
  */
 #define BIO_RESET_BITS	10
-
-
-/*
- * Added for Req based dm which need to perform post processing. This flag
- * ensures blk_update_request does not free the bios or request, this is done
- * at the dm level
- */
-#define BIO_DONTFREE	10
-#define BIO_INLINECRYPT	11
 
 /*
  * We support 6 different bvec pools, the last one is magic in that it
@@ -187,7 +164,6 @@ enum rq_flag_bits {
 	__REQ_INTEGRITY,	/* I/O includes block integrity payload */
 	__REQ_FUA,		/* forced unit access */
 	__REQ_PREFLUSH,		/* request for cache flush */
-	__REQ_BARRIER,		/* marks flush req as barrier */
 
 	/* bio only flags */
 	__REQ_RAHEAD,		/* read ahead, can fail anytime */
@@ -195,7 +171,7 @@ enum rq_flag_bits {
 				 * throttling rules. Don't do it again. */
 
 	/* request only flags */
-	__REQ_SORTED = __REQ_RAHEAD, /* elevator knows about this request */
+	__REQ_SORTED,		/* elevator knows about this request */
 	__REQ_SOFTBARRIER,	/* may not be passed by ioscheduler */
 	__REQ_NOMERGE,		/* don't touch this for merging */
 	__REQ_STARTED,		/* drive already may have started this one */
@@ -215,7 +191,6 @@ enum rq_flag_bits {
 	__REQ_PM,		/* runtime pm request */
 	__REQ_HASHED,		/* on IO scheduler merge hash */
 	__REQ_MQ_INFLIGHT,	/* track inflight for MQ */
-	__REQ_URGENT,		/* urgent request */
 	__REQ_NR_BITS,		/* stops here */
 };
 
@@ -225,7 +200,6 @@ enum rq_flag_bits {
 #define REQ_SYNC		(1ULL << __REQ_SYNC)
 #define REQ_META		(1ULL << __REQ_META)
 #define REQ_PRIO		(1ULL << __REQ_PRIO)
-#define REQ_URGENT		(1ULL << __REQ_URGENT)
 #define REQ_NOIDLE		(1ULL << __REQ_NOIDLE)
 #define REQ_INTEGRITY		(1ULL << __REQ_INTEGRITY)
 
@@ -233,7 +207,7 @@ enum rq_flag_bits {
 	(REQ_FAILFAST_DEV | REQ_FAILFAST_TRANSPORT | REQ_FAILFAST_DRIVER)
 #define REQ_COMMON_MASK \
 	(REQ_FAILFAST_MASK | REQ_SYNC | REQ_META | REQ_PRIO | REQ_NOIDLE | \
-	 REQ_PREFLUSH | REQ_FUA | REQ_INTEGRITY | REQ_NOMERGE | REQ_BARRIER)
+	 REQ_PREFLUSH | REQ_FUA | REQ_INTEGRITY | REQ_NOMERGE)
 #define REQ_CLONE_MASK		REQ_COMMON_MASK
 
 /* This mask is used for both bio and request merge checking */
@@ -246,7 +220,6 @@ enum rq_flag_bits {
 #define REQ_SORTED		(1ULL << __REQ_SORTED)
 #define REQ_SOFTBARRIER		(1ULL << __REQ_SOFTBARRIER)
 #define REQ_FUA			(1ULL << __REQ_FUA)
-#define REQ_BARRIER		(1ULL << __REQ_BARRIER)
 #define REQ_NOMERGE		(1ULL << __REQ_NOMERGE)
 #define REQ_STARTED		(1ULL << __REQ_STARTED)
 #define REQ_DONTPREP		(1ULL << __REQ_DONTPREP)

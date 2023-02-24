@@ -35,6 +35,12 @@ extern struct mutex of_mutex;
 extern struct list_head aliases_lookup;
 extern struct kset *of_kset;
 
+
+static inline struct device_node *kobj_to_device_node(struct kobject *kobj)
+{
+	return container_of(kobj, struct device_node, kobj);
+}
+
 #if defined(CONFIG_OF_DYNAMIC)
 extern int of_property_notify(int action, struct device_node *np,
 			      struct property *prop, struct property *old_prop);
@@ -79,11 +85,6 @@ extern void __of_detach_node_sysfs(struct device_node *np);
 
 extern void __of_sysfs_remove_bin_file(struct device_node *np,
 				       struct property *prop);
-
-/* illegal phandle value (set when unresolved) */
-#define OF_PHANDLE_ILLEGAL	0xdeadbeef
-
-extern void __init of_populate_phandle_cache_early(void);
 
 /* iterators for transactions, used for overlays */
 /* forward iterator */

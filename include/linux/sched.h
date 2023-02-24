@@ -59,7 +59,6 @@ struct sched_param {
 #include <linux/uidgid.h>
 #include <linux/gfp.h>
 #include <linux/magic.h>
-#include <linux/cgroup-defs.h>
 
 #include <asm/processor.h>
 
@@ -140,31 +139,6 @@ struct nameidata;
 #define VMACACHE_SIZE (1U << VMACACHE_BITS)
 #define VMACACHE_MASK (VMACACHE_SIZE - 1)
 
-/*
- * These are the constant used to fake the fixed-point load-average
- * counting. Some notes:
- *  - 11 bit fractions expand to 22 bits by the multiplies: this gives
- *    a load-average precision of 10 bits integer + 11 bits fractional
- *  - if you want to count load-averages more often, you need more
- *    precision, or rounding will get you. With 2-second counting freq,
- *    the EXP_n values would be 1981, 2034 and 2043 if still using only
- *    11 bit fractions.
- */
-extern unsigned long avenrun[];		/* Load averages */
-extern void get_avenrun(unsigned long *loads, unsigned long offset, int shift);
-
-#define FSHIFT		11		/* nr of bits of precision */
-#define FIXED_1		(1<<FSHIFT)	/* 1.0 as fixed-point */
-#define LOAD_FREQ	(5*HZ+1)	/* 5 sec intervals */
-#define EXP_1		1884		/* 1/exp(5sec/1min) as fixed-point */
-#define EXP_5		2014		/* 1/exp(5sec/5min) */
-#define EXP_15		2037		/* 1/exp(5sec/15min) */
-
-#define CALC_LOAD(load,exp,n) \
-	load *= exp; \
-	load += n*(FIXED_1-exp); \
-	load >>= FSHIFT;
-
 extern unsigned long total_forks;
 extern int nr_threads;
 DECLARE_PER_CPU(unsigned long, process_counts);
@@ -214,8 +188,6 @@ static inline int sched_set_wake_up_idle(struct task_struct *p,
 	return 0;
 }
 #endif
-
-extern void calc_global_load(unsigned long ticks);
 
 #if defined(CONFIG_SMP) && defined(CONFIG_NO_HZ_COMMON)
 extern void cpu_load_update_nohz_start(void);
@@ -638,6 +610,7 @@ static inline int get_dumpable(struct mm_struct *mm)
 #define MMF_UNSTABLE		22	/* mm is unstable for copy_from_user */
 #define MMF_HUGE_ZERO_PAGE	23      /* mm has ever used the global huge zero page */
 #define MMF_OOM_VICTIM		25      /* mm is the oom victim */
+#define MMF_OOM_REAP_QUEUED	26	/* mm was queued for oom_reaper */
 
 #define MMF_INIT_MASK		(MMF_DUMPABLE_MASK | MMF_DUMP_FILTER_MASK)
 
@@ -1020,39 +993,7 @@ struct sched_info {
 };
 #endif /* CONFIG_SCHED_INFO */
 
-#ifdef CONFIG_TASK_DELAY_ACCT
-struct task_delay_info {
-	spinlock_t	lock;
-	unsigned int	flags;	/* Private per-task flags */
-
-	/* For each stat XXX, add following, aligned appropriately
-	 *
-	 * struct timespec XXX_start, XXX_end;
-	 * u64 XXX_delay;
-	 * u32 XXX_count;
-	 *
-	 * Atomicity of updates to XXX_delay, XXX_count protected by
-	 * single lock above (split into XXX_lock if contention is an issue).
-	 */
-
-	/*
-	 * XXX_count is incremented on every XXX operation, the delay
-	 * associated with the operation is added to XXX_delay.
-	 * XXX_delay contains the accumulated delay time in nanoseconds.
-	 */
-	u64 blkio_start;	/* Shared by blkio, swapin */
-	u64 blkio_delay;	/* wait for sync block io completion */
-	u64 swapin_delay;	/* wait for swapin block io completion */
-	u32 blkio_count;	/* total count of the number of sync block */
-				/* io operations performed */
-	u32 swapin_count;	/* total count of the number of swapin block */
-				/* io operations performed */
-
-	u64 freepages_start;
-	u64 freepages_delay;	/* wait for memory reclaim */
-	u32 freepages_count;	/* total count of memory reclaim */
-};
-#endif	/* CONFIG_TASK_DELAY_ACCT */
+struct task_delay_info;
 
 static inline int sched_info_on(void)
 {
@@ -1748,12 +1689,6 @@ struct task_struct {
 	unsigned int flags;	/* per process flags, defined below */
 	unsigned int ptrace;
 
-#ifdef CONFIG_SAFESTACK
-	void *unsafe_stack;
-	void *unsafe_stack_ptr;
-	void *unsafe_saved_ptr;
-#endif
-
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
 	int on_cpu;
@@ -1853,6 +1788,10 @@ struct task_struct {
 	unsigned sched_contributes_to_load:1;
 	unsigned sched_migrated:1;
 	unsigned sched_remote_wakeup:1;
+#ifdef CONFIG_PSI
+	unsigned			sched_psi_wake_requeue:1;
+#endif
+
 	unsigned :0; /* force alignment to the next boundary */
 
 	/* unserialized, strictly 'current' */
@@ -2001,8 +1940,8 @@ struct task_struct {
 	struct seccomp seccomp;
 
 /* Thread group tracking */
-   	u32 parent_exec_id;
-   	u32 self_exec_id;
+	u64 parent_exec_id;
+	u64 self_exec_id;
 /* Protection of (de-)allocation: mm, files, fs, tty, keyrings, mems_allowed,
  * mempolicy */
 	spinlock_t alloc_lock;
@@ -2076,6 +2015,10 @@ struct task_struct {
 	unsigned long ptrace_message;
 	siginfo_t *last_siginfo; /* For ptrace use.  */
 	struct task_io_accounting ioac;
+#ifdef CONFIG_PSI
+	/* Pressure stall state */
+	unsigned int			psi_flags;
+#endif
 #if defined(CONFIG_TASK_XACCT)
 	u64 acct_rss_mem1;	/* accumulated rss usage */
 	u64 acct_vm_mem1;	/* accumulated virtual memory usage */
@@ -2100,6 +2043,8 @@ struct task_struct {
 #endif
 	struct list_head pi_state_list;
 	struct futex_pi_state *pi_state_cache;
+	struct mutex futex_exit_mutex;
+	unsigned int futex_state;
 #endif
 #ifdef CONFIG_PERF_EVENTS
 	struct perf_event_context *perf_event_ctxp[perf_nr_task_contexts];
@@ -2169,9 +2114,10 @@ struct task_struct {
 
 	struct page_frag task_frag;
 
-#ifdef	CONFIG_TASK_DELAY_ACCT
-	struct task_delay_info *delays;
+#ifdef CONFIG_TASK_DELAY_ACCT
+	struct task_delay_info		*delays;
 #endif
+
 #ifdef CONFIG_FAULT_INJECTION
 	int make_it_fail;
 #endif
@@ -2329,7 +2275,7 @@ static inline bool in_vfork(struct task_struct *tsk)
 extern void task_numa_fault(int last_node, int node, int pages, int flags);
 extern pid_t task_numa_group_id(struct task_struct *p);
 extern void set_numabalancing_state(bool enabled);
-extern void task_numa_free(struct task_struct *p);
+extern void task_numa_free(struct task_struct *p, bool final);
 extern bool should_numa_migrate_memory(struct task_struct *p, struct page *page,
 					int src_nid, int dst_cpu);
 #else
@@ -2344,7 +2290,7 @@ static inline pid_t task_numa_group_id(struct task_struct *p)
 static inline void set_numabalancing_state(bool enabled)
 {
 }
-static inline void task_numa_free(struct task_struct *p)
+static inline void task_numa_free(struct task_struct *p, bool final)
 {
 }
 static inline bool should_numa_migrate_memory(struct task_struct *p,
@@ -2561,7 +2507,6 @@ extern void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, 
  */
 #define PF_WAKE_UP_IDLE 0x00000002	/* try to wake up on an idle CPU */
 #define PF_EXITING	0x00000004	/* getting shut down */
-#define PF_EXITPIDONE	0x00000008	/* pi exit done on shut down */
 #define PF_VCPU		0x00000010	/* I'm a virtual CPU */
 #define PF_WQ_WORKER	0x00000020	/* I'm a workqueue worker */
 #define PF_FORKNOEXEC	0x00000040	/* forked but didn't exec */
@@ -2582,6 +2527,7 @@ extern void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, 
 #define PF_KTHREAD	0x00200000	/* I am a kernel thread */
 #define PF_RANDOMIZE	0x00400000	/* randomize virtual address space */
 #define PF_SWAPWRITE	0x00800000	/* Allowed to write to swap */
+#define PF_MEMSTALL	0x01000000	/* Stalled due to lack of memory */
 #define PF_NO_SETAFFINITY 0x04000000	/* Userland is not allowed to meddle with cpus_allowed */
 #define PF_MCE_EARLY    0x08000000      /* Early kill for mce process policy */
 #define PF_MUTEX_TESTER	0x20000000	/* Thread belongs to the rt mutex tester */
@@ -2642,6 +2588,8 @@ static inline void memalloc_noio_restore(unsigned int flags)
 #define PFA_LMK_WAITING  3      /* Lowmemorykiller is waiting */
 #define PFA_SPEC_SSB_DISABLE		4	/* Speculative Store Bypass disabled */
 #define PFA_SPEC_SSB_FORCE_DISABLE	5	/* Speculative Store Bypass force disabled*/
+#define PFA_SPEC_IB_DISABLE		6	/* Indirect branch speculation restricted */
+#define PFA_SPEC_IB_FORCE_DISABLE	7	/* Indirect branch speculation permanently restricted */
 
 
 #define TASK_PFA_TEST(name, func)					\
@@ -2674,6 +2622,13 @@ TASK_PFA_CLEAR(SPEC_SSB_DISABLE, spec_ssb_disable)
 
 TASK_PFA_TEST(SPEC_SSB_FORCE_DISABLE, spec_ssb_force_disable)
 TASK_PFA_SET(SPEC_SSB_FORCE_DISABLE, spec_ssb_force_disable)
+
+TASK_PFA_TEST(SPEC_IB_DISABLE, spec_ib_disable)
+TASK_PFA_SET(SPEC_IB_DISABLE, spec_ib_disable)
+TASK_PFA_CLEAR(SPEC_IB_DISABLE, spec_ib_disable)
+
+TASK_PFA_TEST(SPEC_IB_FORCE_DISABLE, spec_ib_force_disable)
+TASK_PFA_SET(SPEC_IB_FORCE_DISABLE, spec_ib_force_disable)
 
 /*
  * task->jobctl flags
@@ -3306,8 +3261,10 @@ extern struct mm_struct *get_task_mm(struct task_struct *task);
  * succeeds.
  */
 extern struct mm_struct *mm_access(struct task_struct *task, unsigned int mode);
-/* Remove the current tasks stale references to the old mm_struct */
-extern void mm_release(struct task_struct *, struct mm_struct *);
+/* Remove the current tasks stale references to the old mm_struct on exit() */
+extern void exit_mm_release(struct task_struct *, struct mm_struct *);
+/* Remove the current tasks stale references to the old mm_struct on exec() */
+extern void exec_mm_release(struct task_struct *, struct mm_struct *);
 
 #ifdef CONFIG_HAVE_COPY_THREAD_TLS
 extern int copy_thread_tls(unsigned long, unsigned long, unsigned long,
@@ -3454,7 +3411,7 @@ static inline int thread_group_empty(struct task_struct *p)
  * Protects ->fs, ->files, ->mm, ->group_info, ->comm, keyring
  * subscriptions and synchronises with wait4().  Also used in procfs.  Also
  * pins the final release of task.io_context.  Also protects ->cpuset and
- * ->cgroup.subsys[]. And ->vfork_done.
+ * ->cgroup.subsys[]. And ->vfork_done. And ->sysvshm.shm_clist.
  *
  * Nests both inside and outside of read_lock(&tasklist_lock).
  * It must not be nested with write_lock_irq(&tasklist_lock),
@@ -3500,11 +3457,7 @@ static inline void unlock_task_sighand(struct task_struct *tsk,
  * subsystems needing threadgroup stability can hook into for
  * synchronization.
  */
-static inline void threadgroup_change_begin(struct task_struct *tsk)
-{
-	might_sleep();
-	cgroup_threadgroup_change_begin(tsk);
-}
+extern void threadgroup_change_begin(struct task_struct *tsk);
 
 /**
  * threadgroup_change_end - mark the end of changes to a threadgroup
@@ -3512,10 +3465,7 @@ static inline void threadgroup_change_begin(struct task_struct *tsk)
  *
  * See threadgroup_change_begin().
  */
-static inline void threadgroup_change_end(struct task_struct *tsk)
-{
-	cgroup_threadgroup_change_end(tsk);
-}
+extern void threadgroup_change_end(struct task_struct *tsk);
 
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 
@@ -3589,18 +3539,14 @@ static inline void *try_get_task_stack(struct task_struct *tsk)
 static inline void put_task_stack(struct task_struct *tsk) {}
 #endif
 
-#include <linux/safestack.h>
-
 #define task_stack_end_corrupted(task) \
-		(*(end_of_stack(task)) != STACK_END_MAGIC || \
-			unsafe_stack_corrupted(task))
+		(*(end_of_stack(task)) != STACK_END_MAGIC)
 
 static inline int object_is_on_stack(void *obj)
 {
 	void *stack = task_stack_page(current);
 
-	return ((obj >= stack) && (obj < (stack + THREAD_SIZE))) ||
-			object_is_on_unsafe_stack(obj);
+	return (obj >= stack) && (obj < (stack + THREAD_SIZE));
 }
 
 extern void thread_stack_cache_init(void);
